@@ -142,6 +142,21 @@ is a per-user choice, and both commands undo themselves with `off`.
 
 %build
 # Upstream's own invocation from the README; --locked honours Cargo.lock.
+#
+# The ONE deliberate divergence from upstream's own build: the release profile
+# in Cargo.toml is `lto = true, codegen-units = 1`, and that fat-LTO link is
+# effectively single-threaded and enormous — measured on Fedora 45, the crate
+# graph compiles in ~31 minutes and the final flea-gui link alone takes ~19 more
+# (it also peaked past a 12 GiB memory cgroup cap and was OOM-killed there).
+# COPR's builders cannot finish that inside the project's build ceiling: the
+# first submission sat in `%build` for 2h46m with no further output and timed out.
+# Thin LTO with 16 codegen units builds the same workspace in 10m49s, for
+# binaries ~15-20 % larger (flea 14.0 vs 12.3 MB, flea-gui 51.6 vs 42.0 MB).
+# It is the same trade upstream itself makes for its own test harness in
+# PKGBUILD's check(), which sets exactly these two variables and keeps fat LTO
+# only for the shipped binary.
+export CARGO_PROFILE_RELEASE_LTO=thin
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 cargo build --locked --release --workspace --bins
 
 %check
