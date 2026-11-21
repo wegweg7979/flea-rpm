@@ -1,0 +1,41 @@
+#!/bin/sh
+# Rewrites rpm/flea.spec.sources with the sha256 of the upstream release asset
+# the spec's Source0 points at.
+#
+# Unlike the app repos this pattern comes from, upstream is NOT ours: the hash is
+# re-pinned for a version that already exists as a release on
+# github.com/thisisgm/flea, and it is stable for a given release (unlike a GitHub
+# tag archive, which is generated on the fly). COPR verifies the hash when it
+# fetches the sources, so a stale one fails the build rather than shipping the
+# wrong tree.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+NAME=flea
+UPSTREAM_REPO=thisisgm/flea
+SPEC="$ROOT/rpm/$NAME.spec"
+
+VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$SPEC" | head -1)"
+if [ -z "$VERSION" ]; then
+    echo "spec-sources: no Version: line in $SPEC" >&2
+    exit 1
+fi
+
+URL="https://github.com/$UPSTREAM_REPO/releases/download/v$VERSION/$NAME-v$VERSION.tar.gz"
+TARBALL="$NAME-v$VERSION.tar.gz"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+echo "spec-sources: fetching $URL"
+curl -sSfL "$URL" -o "$TMP/$TARBALL"
+
+# Proof it is the right tree, not just a redirect body. The markers are UPSTREAM
+# paths — the spec lives in this repository, so it is not in the archive.
+tar -tzf "$TMP/$TARBALL" "$NAME-$VERSION/Cargo.toml" >/dev/null
+tar -tzf "$TMP/$TARBALL" "$NAME-$VERSION/ui/boot/shell.qml" >/dev/null
+
+HASH="$(sha256sum "$TMP/$TARBALL" | cut -d' ' -f1)"
+printf '%s  %s\n' "$HASH" "$TARBALL" > "$ROOT/rpm/$NAME.spec.sources"
+echo "spec-sources: wrote $ROOT/rpm/$NAME.spec.sources"
+cat "$ROOT/rpm/$NAME.spec.sources"

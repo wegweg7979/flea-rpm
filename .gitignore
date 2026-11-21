@@ -1,0 +1,5 @@
+# rpmbuild leftovers if anyone builds in-tree
+*.rpm
+*.src.rpm
+build/
+SRPMS/
